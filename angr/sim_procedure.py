@@ -144,39 +144,48 @@ class SimProcedure:
 
         else:
             # get the arguments
-
-            # handle if this is a continuation from a return
-            if inst.is_continuation:
-                if state.callstack.top.procedure_data is None:
-                    raise SimProcedureError("Tried to return to a SimProcedure in an inapplicable stack frame!")
-
-                saved_sp, sim_args, saved_local_vars, saved_lr = state.callstack.top.procedure_data
-                state.regs.sp = saved_sp
-                if saved_lr is not None:
-                    state.regs.lr = saved_lr
-                inst.arguments = sim_args
-                inst.use_state_arguments = True
-                inst.call_ret_expr = state.registers.load(state.arch.ret_offset, state.arch.bytes, endness=state.arch.register_endness)
-                for name, val in saved_local_vars:
-                    setattr(inst, name, val)
-            else:
-                if arguments is None:
-                    inst.use_state_arguments = True
-                    sim_args = [ inst.arg(_) for _ in range(inst.num_args) ]
-                    inst.arguments = sim_args
-                else:
-                    inst.use_state_arguments = False
-                    sim_args = arguments[:inst.num_args]
-                    inst.arguments = arguments
-
-            # run it
-            l.debug("Executing %s%s%s%s%s with %s, %s", *(inst._describe_me() + (sim_args, inst.kwargs)))
-            r = getattr(inst, inst.run_func)(*sim_args, **inst.kwargs)
+            r = inst._dispatch(state, arguments=arguments)
 
         if inst.returns and inst.is_function and not inst.inhibit_autoret:
             inst.ret(r)
 
         return inst
+
+    def _dispatch(self, state, arguments=None):
+        # handle if this is a continuation from a return
+        if self.is_continuation:
+            if state.callstack.top.procedure_data is None:
+                raise SimProcedureError("Tried to return to a SimProcedure in an inapplicable stack frame!")
+
+            saved_sp, sim_args, saved_local_vars, saved_lr = state.callstack.top.procedure_data
+            state.regs.sp = saved_sp
+            if saved_lr is not None:
+                state.regs.lr = saved_lr
+            self.arguments = sim_args
+            self.use_state_arguments = True
+            self.call_ret_expr = state.registers.load(state.arch.ret_offset, state.arch.bytes, endness=state.arch.register_endness)
+            for name, val in saved_local_vars:
+                setattr(self, name, val)
+        else:
+            if arguments is None:
+                self.use_state_arguments = True
+                sim_args = [ self.arg(_) for _ in range(self.num_args) ]
+                self.arguments = sim_args
+            else:
+                self.use_state_arguments = False
+                sim_args = arguments[:self.num_args]
+                self.arguments = arguments
+
+            # run it
+            l.debug("Executing %s%s%s%s%s with %s, %s", *(self._describe_me() + (sim_args, self.kwargs)))
+            r = getattr(self, self.run_func)(*sim_args, **self.kwargs)
+
+
+
+
+
+        return r
+
 
     def make_continuation(self, name):
         # make a copy of the canon copy, customize it for the specific continuation, then hook it
